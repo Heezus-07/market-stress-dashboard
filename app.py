@@ -487,7 +487,7 @@ def make_ablation_chart(comparison_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         **PLOTLY_LAYOUT,
         height=270,
-        yaxis=dict(title="Δ metric (Full minus No-Sentiment)", range=[-0.3, 0.3], **AXIS_STYLE),
+        yaxis=dict(title="Δ metric (Full minus No-Sentiment)", range=[-0.1, 0.1], **AXIS_STYLE),
         xaxis=dict(title="", **AXIS_STYLE),
     )
     return fig
