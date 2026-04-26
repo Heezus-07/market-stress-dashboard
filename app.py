@@ -265,10 +265,23 @@ def resolve_path(filename: str) -> str:
 
 @st.cache_data
 def load_data() -> Dict[str, pd.DataFrame]:
-    cb = pd.read_csv(resolve_path(DATA_FILES["catboost"]), parse_dates=["date"])
-    abl = pd.read_csv(resolve_path(DATA_FILES["ablation"]), parse_dates=["date"])
-    gar = pd.read_csv(resolve_path(DATA_FILES["garch"]), parse_dates=["date"])
-    shp = pd.read_csv(resolve_path(DATA_FILES["shap"]), parse_dates=["date"])
+    cb = pd.read_csv(resolve_path(DATA_FILES["catboost"]))
+    abl = pd.read_csv(resolve_path(DATA_FILES["ablation"]))
+    gar = pd.read_csv(resolve_path(DATA_FILES["garch"]))
+    shp = pd.read_csv(resolve_path(DATA_FILES["shap"]))
+
+    for df in [cb, abl, gar, shp]:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        try:
+            df["date"] = df["date"].dt.tz_localize(None)
+        except TypeError:
+            pass
+        df["date"] = df["date"].dt.normalize()
+
+    cb = cb.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    abl = abl.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    gar = gar.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    shp = shp.dropna(subset=["date"]).sort_values("date").drop_duplicates(subset=["date"], keep="first").reset_index(drop=True)
 
     gar = gar.rename(columns={"proba": "garch_proba", "pred": "garch_pred"}, errors="ignore")
 
@@ -277,8 +290,10 @@ def load_data() -> Dict[str, pd.DataFrame]:
             shp[col] = pd.to_numeric(shp[col], errors="coerce")
 
     return {
-        k: v.sort_values("date").reset_index(drop=True)
-        for k, v in [("catboost", cb), ("ablation", abl), ("garch", gar), ("shap", shp)]
+        "catboost": cb,
+        "ablation": abl,
+        "garch": gar,
+        "shap": shp,
     }
 
 
@@ -359,15 +374,6 @@ def metric_card(label: str, value: str, color: str | None = None, sub: str | Non
     )
 
 
-def outcome_style(val: str) -> str:
-    return {
-        "Correct alert": "color:#34d399;font-weight:700;",
-        "False alarm": "color:#fb7185;font-weight:700;",
-        "Missed": "color:#fbbf24;font-weight:700;",
-        "Correct negative": "color:#94a3b8;",
-    }.get(val, "")
-
-
 # ============================================================
 # Chart builders
 # ============================================================
@@ -423,7 +429,7 @@ def make_timeline(catboost_df, garch_df, highlight: pd.Timestamp | None = None) 
         line_dash="dot",
         line_color=COLORS["warning"],
         line_width=1,
-        annotation_text=f"E",
+        annotation_text="E",
         annotation_position="right",
         annotation_font=dict(color=COLORS["warning"], size=10),
     )
@@ -432,7 +438,7 @@ def make_timeline(catboost_df, garch_df, highlight: pd.Timestamp | None = None) 
         line_dash="dash",
         line_color=COLORS["danger"],
         line_width=1,
-        annotation_text=f"C",
+        annotation_text="C",
         annotation_position="right",
         annotation_font=dict(color=COLORS["danger"], size=10),
     )
@@ -546,10 +552,11 @@ with h_right:
     )
     st.session_state["selected_day_index"] = all_dates.index(selected_day)
 
-# Resolve selected-day data
-cb_day = catboost_all[catboost_all["date"].dt.date == selected_day]
-shap_day = shap_all[shap_all["date"].dt.date == selected_day]
-garch_day = garch_all[garch_all["date"].dt.date == selected_day]
+selected_ts = pd.Timestamp(selected_day).normalize()
+
+cb_day = catboost_all[catboost_all["date"] == selected_ts]
+shap_day = shap_all[shap_all["date"] == selected_ts]
+garch_day = garch_all[garch_all["date"] == selected_ts]
 
 if not cb_day.empty:
     selected_cb = cb_day.iloc[0]
@@ -558,7 +565,6 @@ else:
 
 selected_prob = float(selected_cb["proba"])
 selected_actual = int(selected_cb["y_true"])
-selected_ts = pd.Timestamp(selected_day)
 selected_day_str = selected_day.strftime("%d %b %Y")
 
 predicted_regime, predicted_regime_color = regime_label(selected_prob)
@@ -575,7 +581,6 @@ else:
     garch_regime, garch_regime_color = "N/A", COLORS["muted"]
     garch_sub = "—"
 
-# Header cards
 col1, col2, col3, col4 = st.columns(4)
 col1.markdown(metric_card("Predicted state", predicted_regime, predicted_regime_color, sub=f"threshold {CLASSIFICATION_THRESHOLD:.2f}"), unsafe_allow_html=True)
 col2.markdown(metric_card("Actual state", actual_label, actual_label_color, sub=selected_day_str), unsafe_allow_html=True)
