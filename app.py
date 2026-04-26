@@ -683,8 +683,9 @@ with tab_alerts:
     disp.columns = ["Date", "Probability", "Top driver 1", "Top driver 2", "Outcome", "Suggested action"]
 
     st.dataframe(
-        disp.style.applymap(outcome_style, subset=["Outcome"]).hide(axis="index"),
+        disp,
         use_container_width=True,
+        hide_index=True,
         height=420,
     )
     st.download_button(
